@@ -23,7 +23,7 @@ int main()
               << "freeing randomly.\n\n";
 
     std::vector<void*> blocks;
-    blocks.reserve(N_ITER);    // avoid realloc inside the vector
+    blocks.reserve(N_ITER);    
 
     std::mt19937_64 rng{std::random_device{}()};
     std::uniform_int_distribution<std::size_t> size_dist(MIN_ALLOC, MAX_ALLOC);
@@ -33,16 +33,16 @@ int main()
 
     for (int i = 1; i <= N_ITER; ++i)
     {
-        // 1. allocate
         std::size_t bytes = size_dist(rng);
         void* ptr = std::malloc(bytes);
-        if (!ptr) { std::perror("malloc"); return 1; }
+        if (!ptr) { std::perror("malloc"); return 1;}
+        std::cout << "Allocated: " << bytes << " bytes\n";  
+        blocks.push_back(ptr);
 
         blocks.push_back(ptr);
         total_allocated += bytes;
         ++alive_blocks;
 
-        // 2. maybe free a *random* earlier block (worse for fragmentation)
         if (free_dist(rng) && !blocks.empty())
         {
             std::uniform_int_distribution<std::size_t>
@@ -54,7 +54,6 @@ int main()
             --alive_blocks;
         }
 
-        // 3. periodic status print (so you see something in the console)
         if (i % REPORT_EVERY == 0)
         {
             std::cout << "Iter " << std::setw(5) << i << '/'
@@ -64,11 +63,9 @@ int main()
                       << std::setw(6) << (total_allocated / MB) << " MB\n";
         }
 
-        // 4. tiny pause so top/htop can refresh
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    // final cleanup
     for (void* p : blocks) std::free(p);
 
     std::cout << "\nDone. All remaining blocks freed. "
