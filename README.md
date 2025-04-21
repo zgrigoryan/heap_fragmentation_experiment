@@ -90,7 +90,7 @@ While the program runs, you will see memory usage increasing as more blocks are 
 
 Python script is sued to capture memory usage data and to generate a plot to visualize it.
 
-!(Memory usage over time)[plot.png]
+!(plot.png)[plot.png]
 
 ---
 
