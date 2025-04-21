@@ -1,44 +1,76 @@
-#include <iostream>
+// heap_fragmentation_demo.cpp
+#include <chrono>
 #include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <random>
+#include <thread>
 #include <vector>
-#include <ctime>
 
-#define MAX_ALLOC_SIZE 1024 * 1024  // Maximum allocation size (1MB)
-#define MIN_ALLOC_SIZE 1024         // Minimum allocation size (1KB)
-#define NUM_ALLOCATIONS 100         // Number of allocations in the loop
+constexpr std::size_t KB = 1024;
+constexpr std::size_t MB = 1024 * KB;
 
-int main() {
-    std::vector<void*> allocations;
+constexpr std::size_t MIN_ALLOC = 1 * KB;   // 1 KB
+constexpr std::size_t MAX_ALLOC = 1 * MB;   // 1 MB
+constexpr int         N_ITER     = 5'000;   // more iterations → clearer graph
+constexpr int         REPORT_EVERY = 250;   // print every N iterations
 
-    // Seed random number generator
-    std::srand(std::time(0));
+int main()
+{
+    std::cout << "Simulating heap fragmentation…\n"
+              << "Will allocate " << N_ITER << " blocks, sizes "
+              << MIN_ALLOC/KB << " KB–" << MAX_ALLOC/KB << " KB, "
+              << "freeing randomly.\n\n";
 
-    for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
-        // Random allocation size between MIN_ALLOC_SIZE and MAX_ALLOC_SIZE
-        size_t alloc_size = MIN_ALLOC_SIZE + std::rand() % (MAX_ALLOC_SIZE - MIN_ALLOC_SIZE);
+    std::vector<void*> blocks;
+    blocks.reserve(N_ITER);    // avoid realloc inside the vector
 
-        // Allocate memory and add it to the allocations vector
-        void* ptr = malloc(alloc_size);
-        if (ptr == nullptr) {
-            std::cerr << "Memory allocation failed!" << std::endl;
-            return 1;
+    std::mt19937_64 rng{std::random_device{}()};
+    std::uniform_int_distribution<std::size_t> size_dist(MIN_ALLOC, MAX_ALLOC);
+    std::uniform_int_distribution<int> free_dist(0, 1);  // 50 % chance to free a past block
+
+    std::size_t total_allocated = 0, alive_blocks = 0;
+
+    for (int i = 1; i <= N_ITER; ++i)
+    {
+        // 1. allocate
+        std::size_t bytes = size_dist(rng);
+        void* ptr = std::malloc(bytes);
+        if (!ptr) { std::perror("malloc"); return 1; }
+
+        blocks.push_back(ptr);
+        total_allocated += bytes;
+        ++alive_blocks;
+
+        // 2. maybe free a *random* earlier block (worse for fragmentation)
+        if (free_dist(rng) && !blocks.empty())
+        {
+            std::uniform_int_distribution<std::size_t>
+                victim_dist(0, blocks.size() - 1);
+            std::size_t idx = victim_dist(rng);
+            std::free(blocks[idx]);
+            blocks[idx] = blocks.back();
+            blocks.pop_back();
+            --alive_blocks;
         }
-        allocations.push_back(ptr);
 
-        // Deallocate every few iterations to simulate fragmentation
-        if (i % 2 == 0 && !allocations.empty()) {
-            free(allocations.back());
-            allocations.pop_back();
+        // 3. periodic status print (so you see something in the console)
+        if (i % REPORT_EVERY == 0)
+        {
+            std::cout << "Iter " << std::setw(5) << i << '/'
+                      << N_ITER
+                      << " | live blocks: " << std::setw(5) << alive_blocks
+                      << " | cum. allocated ≈ "
+                      << std::setw(6) << (total_allocated / MB) << " MB\n";
         }
 
-        // Simulate some computation or delay
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // 4. tiny pause so top/htop can refresh
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    // Clean up remaining allocations
-    for (auto ptr : allocations) {
-        free(ptr);
-    }
+    // final cleanup
+    for (void* p : blocks) std::free(p);
 
-    return 0;
+    std::cout << "\nDone. All remaining blocks freed. "
+                 "Press q in top/htop to quit.\n";
 }
