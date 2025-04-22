@@ -39,7 +39,8 @@ int main()
         std::cout << "Allocated: " << bytes << " bytes\n";  
         blocks.push_back(ptr);
 
-        blocks.push_back(ptr);
+        // comment out to avoid segmentation fault
+        // blocks.push_back(ptr);
         total_allocated += bytes;
         ++alive_blocks;
 
